@@ -12,7 +12,7 @@ def clearDB(c):
 def initDB(c):
     clearDB(c)
     c.execute('''CREATE TABLE users (username text UNIQUE, password text, firstName text, lastName text)''')
-    c.execute('''CREATE TABLE accounts (accountID integer UNIQUE, owner text, pinNum integer, balance real)''')
+    c.execute('''CREATE TABLE accounts (accountID integer UNIQUE, accountName text, owner text, pinNum integer, balance real)''')
 
 
 connection = sqlite3.connect('testdb.db')

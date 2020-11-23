@@ -1,3 +1,4 @@
+import random
 import flask
 import sqlite3
 
@@ -27,13 +28,17 @@ def addUser():
     c.execute(query, (request.args["username"],))
     if len(c.fetchall()) != 0:
         conn.close()
-        return "That user already exists."
+        return {'message': 'That user already exists'}, 401
 
     c.execute('INSERT INTO users VALUES (?,?,?,?)', newUser)
+
+    accountID = random.randint(10**8, 10**9 - 1)
+    print(accountID)
+    c.execute('INSERT INTO accounts VALUES (?,?,?,?,?)', (accountID, 'Checking', newUser[0], 1111, 0))
     conn.commit()
     conn.close()
 
-    return "Account successfully created"
+    return {'message': 'Account successfully created'}, 200
 
 
 @app.route('/users/all', methods=['GET'])
@@ -46,20 +51,20 @@ def getAllUsers():
 
     conn.close()
 
-    print(results)
+    return toJSON(results), 200
 
-    return toJSON(results)
 
 def toJSON(target):
     results = []
     for row in target:
         dictForRow = {
-            'username' : row[0],
-            'password' : row[1],
-            'firstname' : row[2],
-            'lastname' : row[3]
+            'username': row[0],
+            'password': row[1],
+            'firstname': row[2],
+            'lastname': row[3]
         }
         results.append(dictForRow)
     return jsonify(results)
+
 
 app.run()
