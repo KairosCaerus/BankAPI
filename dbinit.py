@@ -15,7 +15,7 @@ def initDB(c):
     c.execute('''CREATE TABLE accounts (accountID integer UNIQUE, accountName text, owner text, pinNum integer, balance real)''')
 
 
-connection = sqlite3.connect('testdb.db')
+connection = sqlite3.connect('bankdb.db')
 cursor = connection.cursor()
 initDB(cursor)
 connection.close()
