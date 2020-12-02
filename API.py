@@ -1,10 +1,13 @@
+import os
 import random
 import flask
 import sqlite3
 
-from flask import request, jsonify
+from flask import request, jsonify, url_for
+from flask_cors import CORS
 
 app = flask.Flask(__name__)
+CORS(app)
 MAIN_DB = 'bankdb.db'
 
 
@@ -31,7 +34,7 @@ def addUser():
 
     if len(c.fetchall()) != 0:
         conn.close()
-        return {'message': 'That user already exists', 'success': False}, 401
+        return {'message': 'That user already exists', 'success': False}, 200
 
     c.execute('INSERT INTO users VALUES (?,?,?,?)', newUser)
 
@@ -90,16 +93,25 @@ def transferCash():
     return {'message': 'Money Transferred', 'success': True}, 200
 
 
-@app.route('/users/deposit', methods=['PUT'])
+@app.route('/users/deposit', methods=['POST'])
 def depositCash():
     targetAccount = request.args['to']
     amountDeposited = int(request.args['amount'])
+    uploadedImage = request.files['file']
 
+    filepath = ''
+    while True:
+        filepath = os.path.join('./bankChecks', f'{random.randint(0, 10**6 - 1)}.{uploadedImage.filename.split(".")[1]}')
+        if not os.path.exists(filepath):
+            break
+
+    uploadedImage.save(filepath)
     conn = sqlite3.connect(MAIN_DB)
     c = conn.cursor()
 
     c.execute('SELECT balance FROM accounts WHERE accountID=?', (targetAccount,))
     c.execute('UPDATE accounts SET balance=? WHERE accountID=?', (c.fetchone()[0] + amountDeposited, targetAccount,))
+    c.execute('INSERT INTO checkHistory VALUES (?, ?, ?)', (targetAccount, amountDeposited, filepath,))
     conn.commit()
 
     conn.close()
@@ -229,7 +241,7 @@ def accountsToJSON(target):
             'accountID': row[0],
             'accountName': row[1],
             'owner': row[2],
-            'balance': row[3]
+            'balance': row[4]
         }
         results.append(dictForRow)
     return jsonify(results)
