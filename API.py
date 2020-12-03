@@ -99,18 +99,25 @@ def depositCash():
     amountDeposited = int(request.args['amount'])
     uploadedImage = request.files['file']
 
-    filepath = ''
-    while True:
-        filepath = os.path.join('./bankChecks', f'{random.randint(0, 10**6 - 1)}.{uploadedImage.filename.split(".")[1]}')
-        if not os.path.exists(filepath):
-            break
-
-    uploadedImage.save(filepath)
     conn = sqlite3.connect(MAIN_DB)
     c = conn.cursor()
 
     c.execute('SELECT balance FROM accounts WHERE accountID=?', (targetAccount,))
-    c.execute('UPDATE accounts SET balance=? WHERE accountID=?', (c.fetchone()[0] + amountDeposited, targetAccount,))
+    result = c.fetchone()
+    if result is None:
+        conn.close()
+        return {'message': 'Account does not exist', 'success': True}, 401
+
+    filepath = ''
+    while True:
+        filepath = os.path.join('./bankChecks',
+                                f'{random.randint(0, 10 ** 6 - 1)}.{uploadedImage.filename.split(".")[1]}')
+        if not os.path.exists(filepath):
+            break
+
+    uploadedImage.save(filepath)
+
+    c.execute('UPDATE accounts SET balance=? WHERE accountID=?', (result[0] + amountDeposited, targetAccount,))
     c.execute('INSERT INTO checkHistory VALUES (?, ?, ?)', (targetAccount, amountDeposited, filepath,))
     conn.commit()
 
@@ -138,7 +145,7 @@ def withdrawCash():
     conn.commit()
     conn.close()
 
-    return {'message': 'Money successful withdrawn', 'success': True}, 200
+    return {'message': 'Money successfully withdrawn', 'success': True}, 200
 
 
 @app.route('/users/login', methods=['GET'])
@@ -174,6 +181,7 @@ def atmLogin():
 
     if len(result) == 0:
         return {'message': 'There are no accounts associated with this username and pin', 'success': False}, 401
+
     return accountsToJSON(result), 200
 
 
@@ -233,14 +241,68 @@ def openAccount():
     return {'message': f'Account successfully created. Account ID is {accountID}', 'accountID': accountID,
             'success': True}, 200
 
+@app.route('/users/accounts/close', methods=['DELETE'])
+def closeAccount():
+    accountID = request.args['target']
+    user = request.args['user']
+    pin = request.args['pin']
+
+    conn = sqlite3.connect(MAIN_DB)
+    c = conn.cursor()
+
+    c.execute('SELECT * FROM accounts WHERE accountID = ? AND pinNum = ? AND owner = ?', (accountID, pin, user,))
+    result = c.fetchone()
+    if result is None:
+        conn.close()
+        return {'message': 'That account does not exist', 'success': False}
+
+    if result[4] > 0:
+        conn.close()
+        return {'message': 'The account still contains money. Please withdraw all money first', 'success': False}
+
+    c.execute('DELETE FROM accounts WHERE accountID = ?', (accountID,))
+
+    conn.commit()
+    conn.close()
+    return {'message': 'Account successfully closed', 'success': True}
+
+@app.route('/users/delete', methods=['DELETE'])
+def deleteUser():
+    username = request.args['user']
+    password = request.args['pass']
+
+    conn = sqlite3.connect(MAIN_DB)
+    c = conn.cursor()
+
+    c.execute('SELECT * FROM users WHERE username = ? AND password = ?', (username, password,))
+    results = c.fetchone()
+    if results is None:
+        conn.close()
+        return {'message': 'Incorrect credentials provided', 'success': False}
+
+    c.execute('SELECT * FROM accounts WHERE owner = ?', (username,))
+    results = c.fetchall()
+    for result in results:
+        if result[4] > 0:
+            conn.close()
+            return {'message': f'Account {result[0]} still has money in it. Please withdraw all cash before deleting account', 'success': False}
+
+    c.execute('DELETE FROM accounts WHERE owner = ?', (username,))
+    c.execute('DELETE FROM users WHERE username = ?', (username,))
+    conn.commit()
+    conn.close()
+
+    return {'message': 'The user and associated accounts were deleted', 'success': True}
+
 
 def accountsToJSON(target):
     results = []
+    results.append({'message' : 'Log in Successful', 'success': True})
     for row in target:
         dictForRow = {
-            'accountID': row[0],
-            'accountName': row[1],
-            'owner': row[2],
+            'Account ID': row[0],
+            'Name': row[1],
+            #'owner': row[2],
             'balance': row[4]
         }
         results.append(dictForRow)
