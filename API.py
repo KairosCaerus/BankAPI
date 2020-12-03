@@ -83,10 +83,14 @@ def transferCash():
         return {'message': 'Source Account doesnt have enough cash', 'success': False}, 401
 
     c.execute('SELECT balance FROM accounts WHERE accountID=?', (targetAccount,))
+    result = c.fetchone()
+    if result is None:
+        conn.close()
+        return {'message': 'Target Account does not exist', 'success': False}, 401
     newCashAmountSource = origCashAmount - transferAmount
-    newCashAmountTarget = c.fetchone()[0] + transferAmount
-    c.execute('UPDATE accounts SET balance=? WHERE accountID=?', (newCashAmountSource, sourceAccount,))
-    c.execute('UPDATE accounts SET balance=? WHERE accountID=?', (newCashAmountTarget, targetAccount,))
+    newCashAmountTarget = result[0] + transferAmount
+    c.execute('UPDATE accounts SET balance=? WHERE accountID=?', (round(newCashAmountSource, 2), sourceAccount,))
+    c.execute('UPDATE accounts SET balance=? WHERE accountID=?', (round(newCashAmountTarget, 2), targetAccount,))
     conn.commit()
 
     conn.close()
@@ -96,7 +100,7 @@ def transferCash():
 @app.route('/users/deposit', methods=['POST'])
 def depositCash():
     targetAccount = request.args['to']
-    amountDeposited = int(request.args['amount'])
+    amountDeposited = float(request.args['amount'])
     uploadedImage = request.files['file']
 
     conn = sqlite3.connect(MAIN_DB)
@@ -117,7 +121,7 @@ def depositCash():
 
     uploadedImage.save(filepath)
 
-    c.execute('UPDATE accounts SET balance=? WHERE accountID=?', (result[0] + amountDeposited, targetAccount,))
+    c.execute('UPDATE accounts SET balance=? WHERE accountID=?', (round(result[0] + amountDeposited, 2), targetAccount,))
     c.execute('INSERT INTO checkHistory VALUES (?, ?, ?)', (targetAccount, amountDeposited, filepath,))
     conn.commit()
 
@@ -127,21 +131,28 @@ def depositCash():
 
 @app.route('/atm/withdraw', methods=['PUT'])
 def withdrawCash():
+    user = request.args['user']
     targetAccount = request.args['from']
-    amountToWithdraw = int(request.args['amount'])
+    amountToWithdraw = float(request.args['amount'])
 
     conn = sqlite3.connect(MAIN_DB)
     c = conn.cursor()
 
-    c.execute('SELECT balance FROM accounts WHERE accountID=?', (targetAccount,))
-    currentAmount = c.fetchone()[0]
+    c.execute('SELECT balance FROM accounts WHERE accountID=? AND owner = ?', (targetAccount, user,))
+    result = c.fetchone()
+
+    if result is None:
+        conn.close()
+        return {'message': 'Account does not exist', 'success': False}, 401
+
+    currentAmount = result[0]
 
     if currentAmount < amountToWithdraw:
         conn.commit()
         conn.close()
         return {'message': 'There is not enough money in the account', 'success': False}, 401
 
-    c.execute('UPDATE accounts SET balance=? WHERE accountID=?', (currentAmount - amountToWithdraw, targetAccount,))
+    c.execute('UPDATE accounts SET balance=? WHERE accountID=?', (round(currentAmount - amountToWithdraw, 2), targetAccount,))
     conn.commit()
     conn.close()
 
@@ -266,6 +277,25 @@ def closeAccount():
     conn.close()
     return {'message': 'Account successfully closed', 'success': True}
 
+@app.route('/users/accounts/owns', methods=['GET'])
+def checkAccountValid():
+    owner = request.args['user']
+    accToCheck = request.args['id']
+
+    conn = sqlite3.connect(MAIN_DB)
+    c = conn.cursor()
+
+    c.execute('SELECT * FROM accounts WHERE accountID = ? AND owner = ?', (accToCheck, owner,))
+
+    result = c.fetchone()
+
+    conn.close()
+
+    if result is None:
+        return {'message': 'You do not own that account', 'success': False}
+    return {'message': 'No issues', 'success': True}
+
+
 @app.route('/users/delete', methods=['DELETE'])
 def deleteUser():
     username = request.args['user']
@@ -285,7 +315,7 @@ def deleteUser():
     for result in results:
         if result[4] > 0:
             conn.close()
-            return {'message': f'Account {result[0]} still has money in it. Please withdraw all cash before deleting account', 'success': False}
+            return {'message': f'Account {result[0]} still has money in it. Please withdraw all cash before deleting account', 'success': False}, 401
 
     c.execute('DELETE FROM accounts WHERE owner = ?', (username,))
     c.execute('DELETE FROM users WHERE username = ?', (username,))
@@ -303,7 +333,7 @@ def accountsToJSON(target):
             'Account ID': row[0],
             'Name': row[1],
             #'owner': row[2],
-            'balance': row[4]
+            'balance': f'${row[4]:.2f}'
         }
         results.append(dictForRow)
     return jsonify(results)
