@@ -193,7 +193,7 @@ def atmLogin():
     if len(result) == 0:
         return {'message': 'There are no accounts associated with this username and pin', 'success': False}, 401
 
-    return accountsToJSON(result), 200
+    return {'message': 'Success, you have been logged in.', 'success': True}, 200
 
 
 @app.route('/users/accounts', methods=['GET'])
