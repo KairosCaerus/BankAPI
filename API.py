@@ -71,7 +71,7 @@ def getAllUsers():
 def transferCash():
     sourceAccount = request.args['from']
     targetAccount = request.args['to']
-    transferAmount = int(request.args['cash'])
+    transferAmount = float(request.args['cash'])
 
     conn = sqlite3.connect(MAIN_DB)
     c = conn.cursor()
